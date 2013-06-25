@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Backbone.cronModel</title>
+  <style type="text/css">
+    body {
+      width: 720px;
+      margin: auto;
+    }
+    .box {
+      border: solid 4px #444;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .box .inner {
+      border: solid 1px #aaa; 
+      background-color: #fff;
+      border-radius: 3px;
+      padding: 5px;
+    }
+    .box .inner h3 {
+      margin: 0 0 5px;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Backbone.Cron Demo</h1>
+  <p>時間が経つにつれてBOX内の色が濃くなっていきます。</p>
+  <div id="view" class="container"></div>
+
+  <script type="text/template" id="tmpl">
+    <div class="box" id="model-<%= cid %>">
+      <div class="inner">
+        <h3>crontab: <%= crontab %></h3>
+        <div>lastupdate: <span class="lastupdate"></span></div>
+        <div>bgcolor: <span class="bgcolor"></span></div>
+      </div>
+    </div>
+  </script>  
+
+  <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
+  <script type="text/javascript" src="http://cdnjs.cloudflare.com/ajax/libs/json2/20121008/json2.js"></script>
+  <script type="text/javascript" src="http://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.4.4/underscore-min.js"></script>
+  <script type="text/javascript" src="http://cdnjs.cloudflare.com/ajax/libs/backbone.js/1.0.0/backbone-min.js"></script>
+  <script type="text/javascript" src="backbone.cron.js"></script>
+  <script type="text/javascript">
+
+    $(function () {
+      var BoxModel = Backbone.Model.extend({
+        defaults: {
+          crontab: null,
+          lastupdate: null,
+          R: 255,
+          G: 255,
+          B: 255,
+          calc: [ 3, 3, 3]
+        },
+        initialize: function () {
+          this.cron = new Backbone.Cron(this, { boxColor: this.get('crontab') });
+        },
+        update: function (label, now) {
+          var param = this.toJSON();
+          this.set({
+            lastupdate: now,
+            R: Math.max(0, param.R - param.calc[0]),
+            G: Math.max(0, param.G - param.calc[1]),
+            B: Math.max(0, param.B - param.calc[2])
+          });
+        }
+      });
+
+      var BoxCollection = Backbone.Collection.extend({
+        model: BoxModel,
+        reset: function (models, options) {
+          this.each(function (model) {
+            model.trigger('remove');
+          });
+          return BoxCollection.__super__.reset.apply(this, arguments);
+        }
+      });
+
+      var BoxView = Backbone.View.extend({
+        el: '#view',
+        initialize: function () {
+          _.bindAll(this);
+          this.tmpl = _.template($('#tmpl').html());
+          this.collection = new BoxCollection();
+          this.collection.bind('add', this.render);
+          this.collection.bind('change', this.update);
+          this.addItems();
+        },
+        addItems: function () {
+          var crontabs = [{
+            crontab: '*/5 * * * * * update',
+            calc: [ 3, 3, 3 ]
+          }, {
+            crontab: '*/2 * * * * * update',
+            calc: [ 1, 2, 3 ]
+          }, {
+            crontab: '5-10,36 * * * * * update',
+            calc: [ 10, 5, 3 ]
+          }, {
+            crontab: '0,16,48 */2 * * * * update',
+            calc: [ 50, 10, 80 ]
+          }];
+          for (var i = 0; i < crontabs.length; i++) {
+            var item = new BoxModel(crontabs[i]);
+            this.collection.add(item);
+          }
+        },
+        render: function (model) {
+          var param = model.toJSON();
+          param.cid = model.cid;
+          param.crontab = param.crontab.replace(/\s+[^\s]+$/, '');
+          $($.parseHTML(this.tmpl(param))).appendTo(this.$el);
+        },
+        update: function (model) {
+          var param = model.toJSON();
+          var rgb = 'rgb(' + param.R + ',' + param.G + ',' + param.B + ')';
+          if (param.R + param.G + param.B === 0) {
+            model.cron.stop();
+          }
+          var $box = this.$el.find('#model-' + model.cid);
+          $box.css({ background: rgb });
+          $box.find('.lastupdate').text(param.lastupdate);
+          $box.find('.bgcolor').text(rgb);
+        }
+      });
+
+      var view = new BoxView();
+
+    });
+  </script>
+</body>
+</html>
